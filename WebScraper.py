@@ -26,9 +26,15 @@ robots.read()
 if not robots.can_fetch("*", userWebsite):
     print("robots.txt does not allow this crawler.")
     exit()
-#touch each website, scrap the site for additional links
-responseFromWebsite = requests.get(userWebsite)
-print(type(responseFromWebsite))
+#touch each website, scrape the site for additional links
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "MyETLCrawler/1.0"
+})
+startTime = time.perf_counter()
+responseFromWebsite = session.get(userWebsite, timeout=5)
+endTime = time.perf_counter()
+responseTime = endTime - startTime
 if responseFromWebsite.status_code == requests.codes.ok:
     htmlData = responseFromWebsite.text
     #print(htmlData[:210])
@@ -42,13 +48,17 @@ if responseFromWebsite.status_code == requests.codes.ok:
     with open("output.csv", "a", newline="") as f:
         writer = csv.writer(f)
         if not fileExists:
-            writer.writerow(["site", "link"])
+            writer.writerow(["Site", "Link", "Status Code", "Respone Time"])
         for link in allLinks:
             href = link.get("href")
             #Converting url ends to join to the website entered
             if href:
                 href = urllib.parse.urljoin(userWebsite, href)
-                writer.writerow([userWebsite, href])
+               
+                responseForLink = session.get(href, timeout=5)
+                statusCode = responseForLink.status_code
+                writer.writerow([userWebsite, href, statusCode, responseTime])
+                time.sleep(.5)
 
     
     #check CSV file for duplicates, if any, remove them and rewrite the file
