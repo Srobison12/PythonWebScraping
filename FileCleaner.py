@@ -1,16 +1,19 @@
 #read CSV
 import csv
 
-
+uniqueRows = []
+seen = set()
 with open("output.csv", "r") as f:
         reader = csv.reader(f)
-        rows = list(reader)
-        uniqueRows = []
-        seen = set()
         for row in reader:
-                row_tuple = tuple(row)
-                if row_tuple not in seen:
-                        seen.add(row_tuple)
+                if not row:
+                       continue
+                if row[0] == "Site":
+                        uniqueRows.append(row)
+                        continue
+                link = row[1]
+                if link not in seen:
+                        seen.add(link)
                         uniqueRows.append(row)
 with open("cleanOutput.csv", "w", newline="") as f:
         writer = csv.writer(f)

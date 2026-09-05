@@ -19,59 +19,87 @@ if not re.match(pattern, userWebsite): #If the website given doesn't match the e
     print("Wrong format... exiting...")
     exit()
 #make sure we abide by the robots.txt....we don't need to get in trouble
-robots = RobotFileParser()
-robots.set_url(userWebsite.rstrip("/") + "/robots.txt")
-robots.read()
-
-if not robots.can_fetch("*", userWebsite):
-    print("robots.txt does not allow this crawler.")
-    exit()
 #touch each website, scrape the site for additional links
 session = requests.Session()
 session.headers.update({
-    "User-Agent": "MyETLCrawler/1.0"
+    "User-Agent": "Srobison12ETLCrawler/1.0"
 })
-startTime = time.perf_counter()
-responseFromWebsite = session.get(userWebsite, timeout=5)
-endTime = time.perf_counter()
-responseTime = endTime - startTime
-if responseFromWebsite.status_code == requests.codes.ok:
-    htmlData = responseFromWebsite.text
-    #print(htmlData[:210])
-    soup = BeautifulSoup(htmlData, "html.parser")
-    allLinks = soup.find_all("a")
+
+toVisit = [userWebsite]
+visitedSites = set()
+maxDepth = 5
+
+
+
+#print(htmlData[:210])
+    
 
 
 
 #Write to that file any uniques we find in CSV formatting
-    fileExists = os.path.exists("output.csv")
-    with open("output.csv", "a", newline="") as f:
-        writer = csv.writer(f)
-        if not fileExists:
-            writer.writerow(["Site", "Link", "Status Code", "Respone Time"])
-        for link in allLinks:
-            href = link.get("href")
-            #Converting url ends to join to the website entered
-            if href:
-                href = urllib.parse.urljoin(userWebsite, href)
-               
-                responseForLink = session.get(href, timeout=5)
-                statusCode = responseForLink.status_code
-                writer.writerow([userWebsite, href, statusCode, responseTime])
-                time.sleep(.5)
+fileExists = os.path.exists("output.csv")
+with open("output.csv", "a", newline="") as f:
+    writer = csv.writer(f)
+    if not fileExists:
+        writer.writerow(["Site", "Link", "Status Code", "Respone Time"])
 
-    
+    while toVisit and len(visitedSites) < maxDepth:
+        currentSite = toVisit.pop(0)
+        if currentSite in visitedSites:
+            continue
+        print(f"Crawling: {currentSite}")
+        visitedSites.add(currentSite)
+        robots = RobotFileParser()
+        robots.set_url(userWebsite.rstrip("/") + "/robots.txt")
+        try:
+            robots.read()
+
+            if not robots.can_fetch("*", userWebsite):
+                print("robots.txt does not allow this crawler.")
+                exit()
+        except Exception as e:
+            print(f"Error reading robots.txt: {e}")
+            continue
+        try:
+            startTime = time.perf_counter()
+            responseFromWebsite = session.get(currentSite, timeout=5)
+            endTime = time.perf_counter()
+            responseTime = endTime - startTime
+        except requests.RequestException as e:
+            print(f"Error fetching {currentSite}: {e}")
+            continue
+        statusCode = responseFromWebsite.status_code
+        if statusCode != requests.codes.ok:
+            continue
+        if "text/html" not in responseFromWebsite.headers.get("Content-Type", ""):
+            continue
+        htmlData = responseFromWebsite.text
+        soup = BeautifulSoup(htmlData, "html.parser")
+        allLinks = soup.find_all("a")
+        
+    for link in allLinks:
+        href = link.get("href")
+        #Converting url ends to join to the website entered
+        if not href:
+            continue
+        href = urllib.parse.urljoin(userWebsite, href)
+        href = urllib.parse.urldefrag(href)[0]  # Remove fragment
+        parsedUrl = urllib.parse.urlparse(href)
+        if parsedUrl.scheme not in ["http", "https"]:
+            continue
+        startingDomain = urllib.parse.urlparse(userWebsite).netloc
+
+        linkDomain = parsedUrl.netloc
+        if startingDomain != linkDomain:
+            continue
+        if href not in visitedSites and href not in toVisit:
+            toVisit.append(href)
+        responseFromWebsite = session.get(href, timeout=5) 
+        
+        writer.writerow([userWebsite, href, statusCode, responseTime])
+        time.sleep(2)
+
+print("Crawling complete. Check output.csv for results.")
+print(f"Pages crawled: {len(visitedSites)}")   
     #check CSV file for duplicates, if any, remove them and rewrite the file
     #Better restructure would be to create an entirely new program that reads the file and cleans up data for the ETL
-    """with open("output.csv", "r") as f:
-        reader = csv.reader(f)
-        rows = list(reader)
-        uniqueRows = []
-        for row in rows:
-            if row not in uniqueRows:
-                uniqueRows.append(row)
-    with open("output.csv", "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerows(uniqueRows)
-else:
-    print(f"Error: {responseFromWebsite.status_code} - {responseFromWebsite.reason}")"""
